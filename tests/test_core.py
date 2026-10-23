@@ -251,6 +251,69 @@ class FetchmailIntegration(TempHome):
         self.assertIn("chmod 600", res[0].error)
 
 
+@unittest.skipUnless(shutil.which("gpg"), "gpg not installed")
+class BackupTests(TempHome):
+    def setUp(self):
+        super().setUp()
+        os.environ["GNUPGHOME"] = os.path.join(self.tmp, "gnupg")
+        os.makedirs(os.environ["GNUPGHOME"], mode=0o700)
+
+    def sample(self):
+        cfg = Config(title="Mine", interval=120, password_store="fetchmailrc",
+                     accounts=[Account("a@gmail.com"), Account("b@x.ee", "mail.x.ee", "POP3", 995)])
+        return cfg, {cfg.accounts[0].key: 'p"1\\x', cfg.accounts[1].key: "p2"}
+
+    def test_roundtrip(self):
+        from gmail_tray import backup
+        cfg, pw = self.sample()
+        out = Path(self.tmp) / backup.default_filename()
+        backup.export_to(out, cfg, pw, "correct horse")
+        self.assertTrue(backup.is_backup(out))
+        self.assertNotIn(b"a@gmail.com", out.read_bytes())
+        self.assertEqual(stat.S_IMODE(out.stat().st_mode), 0o600)
+        cfg2, pw2 = backup.import_from(out, "correct horse")
+        self.assertEqual(cfg2.to_dict(), cfg.to_dict())
+        self.assertEqual(pw2, pw)
+        with self.assertRaises(backup.BackupError) as cm:
+            backup.import_from(out, "wrong horse")
+        self.assertEqual(str(cm.exception), "Wrong passphrase")
+
+    def test_rules(self):
+        from gmail_tray import backup
+        cfg, pw = self.sample()
+        with self.assertRaises(backup.BackupError):
+            backup.export_to(Path(self.tmp) / "x", cfg, pw, "short")
+        with self.assertRaises(backup.BackupError):
+            backup.build_payload(cfg, {})
+        rc = Path(self.tmp) / "rc"
+        rc.write_text("poll x user y password z\n")
+        self.assertFalse(backup.is_backup(rc))
+        with self.assertRaises(backup.BackupError):
+            backup.parse_payload(b'{"format": "something-else"}')
+
+    def test_cli_export_import(self):
+        import subprocess
+        cfg, pw = self.sample()
+        account_store.save_all(Config(password_store="fetchmailrc"), cfg, pw)
+        root = Path(__file__).resolve().parent.parent
+        env = dict(os.environ, GMAIL_TRAY_PASSPHRASE="usb stick pass")
+        env.pop("DBUS_SESSION_BUS_ADDRESS", None)
+        target = Path(self.tmp) / "usb" / "backup.gmail-tray.gpg"
+        target.parent.mkdir()
+        run = lambda *a: subprocess.run([sys.executable, str(root / "bin" / "gmail-tray"), *a],
+                                        env=env, capture_output=True, text=True, timeout=120)
+        r = run("--export", str(target))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        # "new install": wipe everything, then restore
+        shutil.rmtree(config.config_dir())
+        r = run("--import", str(target))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        restored = config.load()
+        self.assertEqual(restored.title, "Mine")
+        self.assertEqual([a.user for a in restored.accounts], ["a@gmail.com", "b@x.ee"])
+        self.assertEqual(account_store.read_managed_rc(), pw)
+
+
 class GtkVersionTests(unittest.TestCase):
     def test_gtk3_is_pinned_even_when_gtk4_exists(self):
         import subprocess

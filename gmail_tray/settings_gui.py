@@ -15,7 +15,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from . import APP_ID, APP_NAME, account_store, config, desktop, fetchmail  # noqa: E402
+from . import APP_ID, APP_NAME, account_store, backup, config, desktop, fetchmail  # noqa: E402
 from .config import Account, Config, ConfigError  # noqa: E402
 
 log = logging.getLogger(__name__)
@@ -245,6 +245,48 @@ class AccountDialog(Gtk.Dialog):
         self.result_account, self.result_password = acc, pw
 
 
+# ====================================================================== passphrase
+
+class PassphraseDialog(Gtk.Dialog):
+    @classmethod
+    def ask(cls, parent, title: str, text: str, confirm: bool) -> str | None:
+        dlg = cls(parent, title, text, confirm)
+        try:
+            while dlg.run() == Gtk.ResponseType.OK:
+                phrase = dlg.first.get_text()
+                if confirm and len(phrase) < backup.MIN_PASSPHRASE:
+                    dlg.error.set_text(f"Use at least {backup.MIN_PASSPHRASE} characters.")
+                elif confirm and phrase != dlg.second.get_text():
+                    dlg.error.set_text("The passphrases do not match.")
+                elif phrase:
+                    return phrase
+            return None
+        finally:
+            dlg.destroy()
+
+    def __init__(self, parent, title, text, confirm):
+        super().__init__(title=title, transient_for=parent, modal=True)
+        self.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        ok = self.add_button("OK", Gtk.ResponseType.OK)
+        ok.get_style_context().add_class("suggested-action")
+        self.set_default_response(Gtk.ResponseType.OK)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin=16)
+        self.get_content_area().add(box)
+        box.pack_start(_label(text, wrap=True), False, False, 0)
+        self.first = Gtk.Entry(visibility=False, activates_default=True,
+                               input_purpose=Gtk.InputPurpose.PASSWORD, placeholder_text="Passphrase")
+        box.pack_start(self.first, False, False, 0)
+        self.second = Gtk.Entry(visibility=False, activates_default=True,
+                                input_purpose=Gtk.InputPurpose.PASSWORD, placeholder_text="Repeat passphrase")
+        if confirm:
+            box.pack_start(self.second, False, False, 0)
+        self.error = _label("", wrap=True)
+        self.error.get_style_context().add_class("error")
+        box.pack_start(self.error, False, False, 0)
+        self.set_default_size(380, -1)
+        self.show_all()
+
+
 # ====================================================================== main window
 
 class SettingsWindow(Gtk.Window):
@@ -336,7 +378,12 @@ class SettingsWindow(Gtk.Window):
         self.btn_edit = Gtk.Button(label="Edit…")
         self.btn_remove = Gtk.Button(label="Remove")
         self.btn_test = Gtk.Button(label="Test all")
-        self.btn_import = Gtk.Button(label="Import from .fetchmailrc…")
+        self.btn_import = Gtk.Button(label="Import…")
+        self.btn_import.set_tooltip_text("Restore a gmail-tray backup, or import a .fetchmailrc")
+        self.btn_export = Gtk.Button(label="Export…")
+        self.btn_export.set_tooltip_text("Save all accounts, passwords and settings to one encrypted "
+                                         "file, e.g. on a USB stick")
+        self.btn_export.connect("clicked", self.on_export)
         self.btn_add.connect("clicked", self.on_add)
         self.btn_edit.connect("clicked", self.on_edit)
         self.btn_remove.connect("clicked", self.on_remove)
@@ -344,6 +391,7 @@ class SettingsWindow(Gtk.Window):
         self.btn_import.connect("clicked", self.on_import)
         for b in (self.btn_add, self.btn_edit, self.btn_remove, self.btn_test):
             row.pack_start(b, False, False, 0)
+        row.pack_end(self.btn_export, False, False, 0)
         row.pack_end(self.btn_import, False, False, 0)
         box.pack_start(row, False, False, 0)
 
@@ -508,36 +556,118 @@ class SettingsWindow(Gtk.Window):
         _run_async(work, done)
 
     def on_import(self, _):
-        chooser = Gtk.FileChooserNative.new("Import fetchmail configuration", self,
+        chooser = Gtk.FileChooserNative.new("Import accounts", self,
                                             Gtk.FileChooserAction.OPEN, "Import", "Cancel")
         chooser.set_show_hidden(True)
+        for name, pattern in (("gmail-tray backups", f"*{backup.SUFFIX}"), ("All files", "*")):
+            flt = Gtk.FileFilter()
+            flt.set_name(name)
+            flt.add_pattern(pattern)
+            chooser.add_filter(flt)
         legacy = self.orig.fetchmailrc_path
         if legacy.exists():
+            chooser.set_filter(chooser.list_filters()[1])
             chooser.set_filename(str(legacy))
         resp = chooser.run()
         path = chooser.get_filename()
         chooser.destroy()
         if resp != Gtk.ResponseType.ACCEPT or not path:
             return
+        if backup.is_backup(Path(path)):
+            self._import_backup(Path(path))
+            return
         try:
             entries = fetchmail.parse_rc(Path(path).read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError) as e:
             self.show_info(f"Cannot read {path}: {e}", Gtk.MessageType.ERROR)
             return
-        added = 0
-        for acc, pw in entries:
-            if any(a.key == acc.key for a in self.accounts):
-                continue
-            self.accounts.append(acc)
-            if pw:
-                self.passwords[acc.key] = pw
-            added += 1
-        self._refresh_accounts()
+        added = self._merge_accounts(entries)
         missing = [a.user for a, pw in entries if not pw]
         msg = f"Imported {added} account(s) from {path}. The file itself was not changed."
         if missing:
             msg += f" No password found for: {', '.join(missing)} — edit them to add one."
         self.show_info(msg + " Click Save to apply.")
+
+    def _merge_accounts(self, entries) -> int:
+        added = 0
+        for acc, pw in entries:
+            if pw:
+                self.passwords[acc.key] = pw
+            if any(a.key == acc.key for a in self.accounts):
+                continue
+            self.accounts.append(acc)
+            added += 1
+        self._refresh_accounts()
+        return added
+
+    def _import_backup(self, path: Path):
+        while True:
+            phrase = PassphraseDialog.ask(self, "Restore backup",
+                                          f"Enter the passphrase for {path.name}.", confirm=False)
+            if phrase is None:
+                return
+            try:
+                cfg, passwords = backup.import_from(path, phrase)
+                break
+            except backup.BackupError as e:
+                if str(e) == "Wrong passphrase":
+                    self.show_info("Wrong passphrase, try again.", Gtk.MessageType.WARNING)
+                    continue
+                self.show_info(str(e), Gtk.MessageType.ERROR)
+                return
+        added = self._merge_accounts([(a, passwords.get(a.key, "")) for a in cfg.accounts])
+        self._apply_general(cfg)
+        self.show_info(f"Restored {added} new account(s) with passwords and all settings from "
+                       f"{path.name}. Click Save to apply.")
+
+    def on_export(self, _):
+        try:
+            cfg, passwords = account_store.collect_for_export(self._collect(), self.passwords)
+        except ConfigError as e:
+            self.show_info(str(e), Gtk.MessageType.ERROR)
+            return
+        missing = [a.user for a in cfg.accounts if a.key not in passwords]
+        if missing:
+            self.show_info(f"No password known for: {', '.join(missing)} — edit them first.",
+                           Gtk.MessageType.ERROR)
+            return
+        chooser = Gtk.FileChooserNative.new("Export backup", self, Gtk.FileChooserAction.SAVE,
+                                            "Export", "Cancel")
+        chooser.set_do_overwrite_confirmation(True)
+        chooser.set_current_name(backup.default_filename())
+        resp = chooser.run()
+        path = chooser.get_filename()
+        chooser.destroy()
+        if resp != Gtk.ResponseType.ACCEPT or not path:
+            return
+        phrase = PassphraseDialog.ask(
+            self, "Protect the backup",
+            "The backup holds your mail passwords. Choose a passphrase — you need it to restore.",
+            confirm=True)
+        if phrase is None:
+            return
+        try:
+            backup.export_to(Path(path), cfg, passwords, phrase)
+        except (backup.BackupError, ConfigError) as e:
+            self.show_info(str(e), Gtk.MessageType.ERROR)
+            return
+        self.show_info(f"Saved {len(cfg.accounts)} account(s) and all settings to {path} "
+                       "(encrypted with AES-256).")
+
+    def _apply_general(self, c: Config):
+        self.e_title.set_text(c.title)
+        self.e_url.set_text(c.url)
+        browser_ok = not c.browser or shutil.which(c.browser)
+        self.e_browser.get_child().set_text(c.browser if browser_ok else SYSTEM_DEFAULT_LABEL)
+        self.e_flags.set_text(shlex.join(c.flags) if browser_ok else "")
+        self.e_interval.set_value(c.interval)
+        self.e_icon.set_text(c.icon)
+        self.sw_notify.set_active(c.notifications)
+        self.e_timeout.set_value(c.notification_timeout)
+        if c.password_store == "keyring" and self.keyring_ok:
+            self.rb_keyring.set_active(True)
+        else:
+            self.rb_file.set_active(True)
 
     # ---------------------------------------------------------------- general page
 

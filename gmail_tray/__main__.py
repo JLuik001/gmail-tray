@@ -56,11 +56,64 @@ def print_check(cfg_path) -> int:
     return 0 if all(s.ok for s in statuses) else 1
 
 
+def _ask_passphrase(confirm: bool) -> str:
+    import getpass
+    env = os.environ.get("GMAIL_TRAY_PASSPHRASE")
+    if env:
+        return env
+    phrase = getpass.getpass("Backup passphrase: ")
+    if confirm and getpass.getpass("Repeat passphrase: ") != phrase:
+        raise SystemExit("Passphrases do not match")
+    return phrase
+
+
+def cli_export(cfg_path, target) -> int:
+    from . import account_store, backup
+    try:
+        cfg, passwords = account_store.collect_for_export(config.load(cfg_path))
+        missing = [a.user for a in cfg.accounts if a.key not in passwords]
+        if missing:
+            raise backup.BackupError(f"No password known for: {', '.join(missing)}")
+        backup.export_to(Path(target).expanduser(), cfg, passwords, _ask_passphrase(confirm=True))
+    except (backup.BackupError, config.ConfigError) as e:
+        print(f"Export failed: {e}", file=sys.stderr)
+        return 1
+    print(f"Saved {len(cfg.accounts)} account(s) and settings to {target}")
+    return 0
+
+
+def cli_import(cfg_path, source) -> int:
+    """Restore a backup, replacing the current settings."""
+    from . import account_store, backup, secret_store
+    try:
+        new, passwords = backup.import_from(Path(source).expanduser(), _ask_passphrase(confirm=False))
+        if new.password_store == "keyring" and not secret_store.usable()[0]:
+            print("Keyring not available, storing passwords in a private 0600 file instead",
+                  file=sys.stderr)
+            new.password_store = "fetchmailrc"
+        try:
+            old = config.load(cfg_path)
+        except config.ConfigError:
+            old = config.Config()
+        notes = account_store.save_all(old, new, passwords, cfg_path=cfg_path)
+    except (backup.BackupError, config.ConfigError) as e:
+        print(f"Import failed: {e}", file=sys.stderr)
+        return 1
+    for n in notes:
+        print(n, file=sys.stderr)
+    print(f"Restored {len(new.accounts)} account(s): " + ", ".join(a.user for a in new.accounts))
+    return 0
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog=APP_ID, description="Minimal Gmail tray notifier (fetchmail based)")
     p.add_argument("--settings", action="store_true", help="open the settings window")
     p.add_argument("--once", action="store_true", help="print unread count as Waybar JSON and exit")
     p.add_argument("--check", action="store_true", help="check all accounts, print results and exit")
+    p.add_argument("--export", metavar="FILE",
+                   help="save accounts, passwords and settings to an encrypted backup file")
+    p.add_argument("--import", dest="import_file", metavar="FILE",
+                   help="restore an encrypted backup (replaces current settings)")
     p.add_argument("--config", metavar="FILE", help="use another configuration file")
     p.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -71,6 +124,10 @@ def main(argv=None) -> int:
     cfg_path = Path(args.config).expanduser() if args.config else config.config_path()
 
     try:
+        if args.export:
+            return cli_export(cfg_path, args.export)
+        if args.import_file:
+            return cli_import(cfg_path, args.import_file)
         if args.once:
             return waybar_once(cfg_path)
         if args.check:

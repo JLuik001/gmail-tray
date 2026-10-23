@@ -117,6 +117,39 @@ def save_all(old: Config, new: Config, new_passwords: dict[Key, str],
     return notes
 
 
+def collect_for_export(cfg: Config, extra: dict[Key, str] | None = None,
+                       backend: _Backend | None = None) -> tuple[Config, dict[Key, str]]:
+    """Config plus every password, ready for an encrypted backup.
+
+    *extra* holds passwords typed in the settings window but not saved yet.
+    Hand-written ~/.fetchmailrc accounts are included as managed accounts.
+    """
+    import copy
+    out = copy.deepcopy(cfg)
+    passwords: dict[Key, str] = {}
+    extra = extra or {}
+    if out.managed:
+        for acc in out.accounts:
+            pw = extra.get(acc.key)
+            if not pw:
+                try:
+                    pw = current_password(cfg, acc, backend)
+                except Exception as e:  # noqa: BLE001
+                    raise ConfigError(f"Cannot read the password of {acc.user}: {e}") from e
+            if pw:
+                passwords[acc.key] = pw
+    else:
+        try:
+            entries = fetchmail.parse_rc(out.fetchmailrc_path.read_text(encoding="utf-8"))
+        except OSError:
+            entries = []
+        out.accounts = [acc for acc, _ in entries]
+        passwords = {acc.key: pw for acc, pw in entries if pw}
+    if not out.accounts:
+        raise ConfigError("There are no accounts to back up")
+    return out.validate(), passwords
+
+
 def legacy_rc_has_passwords(path: Path) -> bool:
     try:
         return any(pw for _, pw in fetchmail.parse_rc(path.read_text(encoding="utf-8")))

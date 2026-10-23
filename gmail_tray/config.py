@@ -72,14 +72,19 @@ def ensure_private_dir(path: Path) -> None:
         os.chmod(path, 0o700)
 
 
-def atomic_write_private(path: Path, data: str) -> None:
+def atomic_write_private(path: Path, data: str | bytes) -> None:
     """Write *data* to *path* atomically with mode 0600."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if isinstance(data, str):
+        data = data.encode("utf-8")
     fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+        try:
+            os.fchmod(fd, 0o600)  # mkstemp already uses 0600; FAT USB sticks refuse chmod
+        except OSError:
+            pass
+        with os.fdopen(fd, "wb") as f:
             f.write(data)
             f.flush()
             os.fsync(f.fileno())

@@ -27,6 +27,7 @@ this fork adds the settings GUI, keyring storage and a security overhaul.
 *   [x] Config changes apply immediately, no restart needed
 *   [x] Gmail, Yahoo, iCloud, Fastmail presets, any IMAP/POP3 server
 *   [x] systemd user service for autostart and crash recovery
+*   [x] **Encrypted backup/restore** of all accounts and settings (USB stick, new install)
 *   [x] Waybar module output
 *   [x] Full Wayland and Xorg support, works with any libnotify notification daemon
 
@@ -65,6 +66,21 @@ now in the keyring (keep it if you use fetchmail to actually download mail).
 
 If you don't add accounts in Settings, an existing `~/.fetchmailrc` keeps working as before.
 
+## Backup and restore (e.g. on a USB stick)
+
+*Accounts → Export…* saves every account, its password and all settings into one file,
+encrypted with GnuPG (AES-256) and a passphrase you choose. After a fresh install:
+*Accounts → Import…* → pick the file → enter the passphrase → *Save*. Done.
+
+From the command line (handy in post-install scripts):
+
+```sh
+gmail-tray --export /run/media/$USER/USB/gmail-tray.gmail-tray.gpg
+gmail-tray --import /run/media/$USER/USB/gmail-tray.gmail-tray.gpg   # replaces current settings
+```
+
+The passphrase is asked interactively, or read from `GMAIL_TRAY_PASSPHRASE`.
+
 # Customizations
 
 Everything is in the *General* and *Notifications & startup* tabs. The config file
@@ -102,6 +118,8 @@ gmail-tray               start the tray (if already running: open Gmail)
 gmail-tray --settings    open the settings window
 gmail-tray --check       check all accounts, print the result (exit 1 on errors)
 gmail-tray --once        print Waybar JSON and exit
+gmail-tray --export F    encrypted backup of accounts, passwords and settings
+gmail-tray --import F    restore such a backup
 gmail-tray -v            debug logging
 ```
 
