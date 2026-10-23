@@ -43,7 +43,7 @@ class TrayApp:
         except Exception as e:  # noqa: BLE001  (pycairo missing etc.)
             log.warning("Unread badge disabled: %s", e)
         self.notifier = desktop.Notifier(self.cfg.title)
-        self._rebuild_menu()
+        self._build_menu()
 
         # Reload automatically when the settings window (or an editor) saves the config.
         self.monitor = Gio.File.new_for_path(str(self.cfg_path.parent)).monitor_directory(
@@ -125,7 +125,7 @@ class TrayApp:
         self.prev_unread = {s.key: s.unread for s in statuses if s.ok}
         for s in errors:
             log.warning("%s: %s", s.user, s.error)
-        self._rebuild_menu()
+        self._update_menu()
         return False
 
     def _update_icon(self, total: int, has_errors: bool) -> None:
@@ -159,35 +159,83 @@ class TrayApp:
                            on_open=lambda: desktop.open_url(self.cfg, target))
 
     # ------------------------------------------------------------ menu
+    #
+    # The menu is built once and then only updated in place. KDE Plasma caches
+    # the exported DBusMenu layout; replacing the whole menu after every check
+    # made its clicks point at item ids that no longer existed, so nothing
+    # happened when an entry was clicked.
 
-    def _item(self, menu, label, callback=None, sensitive=True):
-        item = Gtk.MenuItem(label=label)
-        item.set_use_underline(False)
-        if callback:
-            item.connect("activate", callback)
-        item.set_sensitive(sensitive)
-        menu.append(item)
-        return item
+    def _build_menu(self) -> None:
+        self.menu = Gtk.Menu()
+        self.account_items: dict[tuple, Gtk.MenuItem] = {}
+        self.item_actions: dict[Gtk.MenuItem, object] = {}
 
-    def _rebuild_menu(self) -> None:
-        menu = Gtk.Menu()
-        self._item(menu, f"Open {self.cfg.title}", lambda _: desktop.open_url(self.cfg))
-        self._item(menu, "Check now", self.check_now)
-        if self.statuses:
-            menu.append(Gtk.SeparatorMenuItem())
-            for s in self.statuses:
-                if s.ok:
-                    acc = self._account_for(s)
-                    url = desktop.account_url(self.cfg, acc)
-                    self._item(menu, f"{s.user}: {s.unread} unread",
-                               lambda _, u=url: desktop.open_url(self.cfg, u))
-                else:
-                    self._item(menu, f"⚠ {s.user}: {s.error}", self.open_settings)
-        menu.append(Gtk.SeparatorMenuItem())
-        self._item(menu, "Settings…", self.open_settings)
-        self._item(menu, "Quit", lambda _: Gtk.main_quit())
-        menu.show_all()
-        self.indicator.set_menu(menu)
+        def add(label, action):
+            item = Gtk.MenuItem(label=label)
+            item.set_use_underline(False)
+            item.connect("activate", lambda it: self._run_action(it))
+            self.item_actions[item] = action
+            self.menu.append(item)
+            return item
+
+        self.open_item = add(f"Open {self.cfg.title}", lambda: desktop.open_url(self.cfg))
+        add("Check now", self.check_now)
+        self.accounts_top = Gtk.SeparatorMenuItem()
+        self.menu.append(self.accounts_top)
+        self.accounts_end = Gtk.SeparatorMenuItem()
+        self.menu.append(self.accounts_end)
+        add("Settings…", self.open_settings)
+        add("Quit", Gtk.main_quit)
+        self.menu.show_all()
+        self.accounts_top.hide()
+        self.indicator.set_menu(self.menu)
+        # Middle click on the tray icon opens the mail page directly.
+        self.indicator.set_secondary_activate_target(self.open_item)
+
+    def _run_action(self, item) -> None:
+        action = self.item_actions.get(item)
+        if action is None:
+            return
+        try:
+            action()
+        except Exception:  # noqa: BLE001  (a failing click must not kill the tray)
+            log.exception("Menu action failed")
+
+    def _update_menu(self) -> None:
+        self.open_item.set_label(f"Open {self.cfg.title}")
+        wanted = []
+        for st in self.statuses:
+            key = st.key if st.user != "fetchmail" else ("fetchmail", st.error or "")
+            if st.ok:
+                label = f"{st.user}: {st.unread} unread"
+                action = (lambda s=st: desktop.open_url(
+                    self.cfg, desktop.account_url(self.cfg, self._account_for(s))))
+            else:
+                label = f"⚠ {st.user}: {st.error}"
+                action = self.open_settings
+            wanted.append((key, label, action))
+
+        keys = {k for k, _, _ in wanted}
+        for key in list(self.account_items):
+            if key not in keys:
+                item = self.account_items.pop(key)
+                self.item_actions.pop(item, None)
+                item.destroy()
+
+        pos = self.menu.get_children().index(self.accounts_top) + 1
+        for i, (key, label, action) in enumerate(wanted):
+            item = self.account_items.get(key)
+            if item is None:
+                item = Gtk.MenuItem(label=label)
+                item.set_use_underline(False)
+                item.connect("activate", lambda it: self._run_action(it))
+                self.menu.insert(item, pos + i)
+                item.show()
+                self.account_items[key] = item
+            elif item.get_label() != label:
+                item.set_label(label)
+            self.item_actions[item] = action
+        self.accounts_top.set_visible(bool(wanted))
 
     # ------------------------------------------------------------ settings
 

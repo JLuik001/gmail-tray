@@ -21,7 +21,8 @@ this fork adds the settings GUI, keyring storage and a security overhaul.
 *   [x] Regular email checking (several accounts, checked in parallel)
 *   [x] Clickable system notifications — open the inbox of the account that got mail
 *   [x] Red badge with the unread count on the tray icon (works in KDE Plasma too), amber “!” on errors
-*   [x] Per-account counts and errors in the tray menu
+*   [x] Per-account counts and errors in the tray menu — click an account to open its inbox
+*   [x] Middle-click the tray icon to open Gmail
 *   [x] **Settings window for fetchmail accounts** — add, edit, test, import
 *   [x] **Settings window for customizations** — browser, flags, interval, icon, notifications, autostart
 *   [x] **Passwords in the desktop keyring** (GNOME Keyring, KWallet, KeePassXC…) instead of a plain-text file
