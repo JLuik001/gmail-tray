@@ -86,7 +86,7 @@ def render(icon: str, text: str, color: tuple, out_path: Path, size: int = SIZE)
 
 
 class BadgeIcons:
-    """Renders badge icons into a private directory and returns icon names for it."""
+    """Renders badge icons into a private directory."""
 
     def __init__(self, directory: Path):
         self.dir = Path(directory)
@@ -97,14 +97,19 @@ class BadgeIcons:
         return "99+" if count > 99 else str(count)
 
     def name_for(self, icon: str, text: str, color: tuple) -> str:
-        # Unique name per state: trays cache icons by name.
+        """Absolute path of the badge icon (unique per state: trays cache icons).
+
+        A full path is loaded straight from the file by every tray (KDE Plasma,
+        GNOME, Waybar); a bare name would depend on how each tray scans the
+        theme path, and Plasma does not notice icons created after startup.
+        """
         tag = hashlib.sha1(f"{icon}|{text}|{color}".encode()).hexdigest()[:10]
         name = f"gmail-tray-badge-{tag}"
         path = self.dir / f"{name}.png"
         if not path.exists():
             render(icon, text, color, path)
         self._prune(keep=path)
-        return name
+        return str(path)
 
     def _prune(self, keep: Path, limit: int = 20):
         files = sorted(self.dir.glob("gmail-tray-badge-*.png"), key=lambda p: p.stat().st_mtime)

@@ -327,7 +327,8 @@ class BadgeTests(TempHome):
         self.assertEqual(n1, b.name_for("no-such-icon", "3", RED))
         n2 = b.name_for("no-such-icon", "!", AMBER)
         self.assertNotEqual(n1, n2)
-        png = (b.dir / f"{n1}.png").read_bytes()
+        self.assertTrue(os.path.isabs(n1))
+        png = Path(n1).read_bytes()
         self.assertTrue(png.startswith(b"\x89PNG"))
 
     def test_badge_option(self):
