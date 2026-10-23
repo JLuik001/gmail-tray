@@ -1,0 +1,14 @@
+#!/usr/bin/python3
+import os
+import sys
+
+# Installed layout: /usr/lib/gmail-tray/gmail_tray. From a source checkout: ../gmail_tray.
+here = os.path.dirname(os.path.realpath(__file__))
+for candidate in (os.path.join(here, ".."), "/usr/lib/gmail-tray"):
+    if os.path.isdir(os.path.join(candidate, "gmail_tray")):
+        sys.path.insert(0, os.path.abspath(candidate))
+        break
+
+from gmail_tray.__main__ import main  # noqa: E402
+
+sys.exit(main())

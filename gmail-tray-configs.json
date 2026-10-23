@@ -1,8 +1,0 @@
-{
-    "url": "https://mail.google.com",
-    "icon": "gmail-tray",
-    "title": "Gmail-Tray",
-    "interval": 30,
-    "browser": "firefox",
-    "flags": ["--ProfileManager", "--new-tab"]
-}

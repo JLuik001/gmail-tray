@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=Gmail Tray
+Comment=Lightweight Gmail tray notifier
+Exec=gmail-tray
+Icon=gmail-tray
+Categories=Network;Email;
+Keywords=mail;gmail;notifier;fetchmail;
+StartupNotify=false
+Actions=Settings;Check;
+
+[Desktop Action Settings]
+Name=Settings
+Exec=gmail-tray --settings
+
+[Desktop Action Check]
+Name=Check mail now
+Exec=gmail-tray --check

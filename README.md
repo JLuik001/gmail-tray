@@ -1,196 +1,135 @@
 # Gmail-Tray
 
-Minimal Gmail notifier, with tray-icon, unread counter, opening the gmail page on a browser (firefox).
+Minimal Gmail notifier with a tray icon, unread counter and a settings window.
+It uses [fetchmail](https://www.fetchmail.info) to check your mailboxes and
+opens Gmail in your browser with one click.
 
-It mostly uses [fetchmail](https://www.fetchmail.info) to search for new emails and notify you,
-- so you the main credits go for it's creator
-
-My main job was create an interface and set up the polling code,
-- so that it checks for emails on terminal,
-- notifies the user
-- and update the unread emails count
-
-Also, you must set it (fetchmail) up first for it to work
+Originally written by [Maykon Marcos Junior](https://github.com/maykonmarcosjuniordev-star/gmail-tray);
+this fork adds the settings GUI, keyring storage and a security overhaul.
 
 # Table of Contents
-*   [Features](README.md#features)
-*   [Running this Repo](README.md#running-the-repo)
-*   [Getting Started with Fetchmail](README.md#setting-up-fetchmail)
-*   [Customizations](README.md#customizations)
-*   [SNI (waybar) Support](README.md#sni-waybar-support)
-
+*   [Features](#features)
+*   [Install](#install)
+*   [Setting up accounts](#setting-up-accounts)
+*   [Customizations](#customizations)
+*   [Security](#security)
+*   [Command line](#command-line)
+*   [SNI (Waybar) support](#sni-waybar-support)
+*   [Development](#development)
 
 # Features
-*   [x] Regular email checking
-*   [x] System notifications
-*   [x] Tray icon indication of unread messages
-    *   Doesn't work natively with waybar, see ahead
-*   [x] Clicking on tray icon allow opening gmail website on browser
-*   [x] System service to allow autostart
-*   [x] Browser and flags can be added on a config file
-*   [x] User settings on ~/.config/gmail-tray
-*   [x] Multiple emails accounts suppor
-*   [x] Clicking on the desktop app after it started launchs gmail website
-*   [x] Clicking on tray icon display unread count per account
-*   [x] Clicking on tray icon option can also re-launch notifications per account
-*   [x] Full Wayland and Xorg Support
-*   [x] Works on any linux using libnotify
-*   [x] Make the notifications clickable
+*   [x] Regular email checking (several accounts, checked in parallel)
+*   [x] Clickable system notifications — open the inbox of the account that got mail
+*   [x] Tray icon with unread counter, per-account counts and errors in the menu
+*   [x] **Settings window for fetchmail accounts** — add, edit, test, import
+*   [x] **Settings window for customizations** — browser, flags, interval, icon, notifications, autostart
+*   [x] **Passwords in the desktop keyring** (GNOME Keyring, KWallet, KeePassXC…) instead of a plain-text file
+*   [x] Config changes apply immediately, no restart needed
+*   [x] Gmail, Yahoo, iCloud, Fastmail presets, any IMAP/POP3 server
+*   [x] systemd user service for autostart and crash recovery
+*   [x] Waybar module output
+*   [x] Full Wayland and Xorg support, works with any libnotify notification daemon
 
-In the Future
-*   [ ] A TUI to set up fetchmail
-*   [ ] A TUI to allow for customizations
+# Install
 
-## Running the repo
-*   This project relies on [maskfile](https://github.com/jacobdeichert/mask) to use the readme as a makefile
-*   So you can install mask, and run this README, using: 
-*   mask --maskfile README.md <command>
-I recommend adding
-```sh
-alias maskrun='mask --maskfile README.md'
-```
-*   to your .bash_aliases or .zsh_aliases
-
-## ready
-> make sure everything is up to date
-
-**OPTIONS**
-* hash_is_done
-    * flags: --skip
-    * type: boolean
-    * desc: wheter to verify the hashes for PKBUILD
+Arch Linux:
 
 ```sh
-# defaults to false
-HASH=${hash_is_done:-false}
-echo "Skipping Hash = $HASH"
-echo "building project..."
-if [[ !$HASH ]]; then
-    makepkg -g
-    read -p "Press [Enter] to continue after checking the hashes..."
-fi
-makepkg --printsrcinfo > .SRCINFO
-makepkg -fsrc
+git clone https://github.com/JLuik001/gmail-tray.git
+cd gmail-tray
+makepkg -si
 ```
 
-## install
-0nly arch linux supported for now:
+Any other distro (needs fetchmail, python-gobject, gtk3, libayatana-appindicator, libnotify, libsecret):
 
-for the AUR [pkg](https://aur.archlinux.org/packages/gmail-tray-git)
-- yay -S gmail-tray-git
-- paru -S gmail-tray-git
-
-Or, for manual install:
-> at the repository root directory
 ```sh
-echo "creating and installing the package"
-makepkg -fsirc
+sudo make install           # PREFIX=/usr by default
 ```
 
-## autostart
-> Enables an autostart service, that runs on PC startup and ensures it recovers from crashes
+Start it from the app menu, or enable autostart (also a switch in Settings):
+
 ```sh
 systemctl --user enable --now gmail-tray.service
 ```
 
-## remove
-> Uninstalls from the system, whether in a manual or aided install
-```sh
-sudo pacman -Rns gmail-tray
-```
+# Setting up accounts
 
-## push (repo)
-> For me to not forget what I need to sync it with the AUR
-```sh
-echo "Pushing to $repo"
-if [[ "$repo" -eq "github" ]]; then
-    git remote add github git@github.com:maykonmarcosjuniordev-star/gmail-tray.git
-    git push --set-upstream github master
-else
-    git remote add aur ssh://aur@aur.archlinux.org/gmail-tray-git.git
-    git push --set-upstream aur master
-fi
-```
-<br>
-<br>
-<br>
+1.  Turn on 2-Step Verification for your Google account and create an
+    [app password](https://myaccount.google.com/apppasswords).
+2.  Run `gmail-tray --settings` (or *Settings…* in the tray menu, or right-click the app icon).
+3.  *Accounts → Add…*, enter your address and the app password, press *Test connection*, then *Save*.
 
-# Setting up fetchmail:
+Already have a `~/.fetchmailrc`? Click *Import from .fetchmailrc…*. Your file is
+never modified; after saving, the app offers to delete it if your passwords are
+now in the keyring (keep it if you use fetchmail to actually download mail).
 
-Create an app password (you need to have 2-Factor Authentication)
-
-*   Go to: [https://myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
-*   Give it a name 
-*   Tap **Create**
-*   Note it down and save
-*   create a file named **.fetchmailrc** in your home folder
-*   Edit the .fetchmailrc file to add your desired accounts:
-    *   poll imap.gmail.com with proto IMAP  
-           user \<your gmail 1 here>@gmail.com password \<"Your App Password 1 between quotes">  
-           ssl
-    *   poll imap.gmail.com with proto IMAP  
-           user \<your gmail 2 here>@gmail.com password \<"Your App Password 2 between quotes">  
-           ssl
-*   Then:
-```sh
-chmod 0600 ~/.fetchmailrc
-```
+If you don't add accounts in Settings, an existing `~/.fetchmailrc` keeps working as before.
 
 # Customizations
 
-The user config file will be in ~/.config/gmail-tray/gmail-tray-configs.json
+Everything is in the *General* and *Notifications & startup* tabs. The config file
+is `~/.config/gmail-tray/gmail-tray-configs.json` and can still be edited by hand:
 
-There, you can change:
+| Key | Meaning |
+| --- | --- |
+| `url` | Page to open (https only). Gmail accounts open their own inbox. |
+| `browser` | Command name or path; empty = system default browser |
+| `flags` | Extra browser arguments, e.g. `["--new-tab"]`, `["-P", "work"]` |
+| `interval` | Seconds between checks (30–86400) |
+| `icon` | Icon theme name or image path |
+| `title` | App title |
+| `notifications`, `notification_timeout` | On/off, seconds (0 = until dismissed) |
+| `password_store` | `keyring` (recommended) or `fetchmailrc` |
+| `accounts` | Managed accounts (no passwords in here) |
 
-*   The checking interval to run fetchmail,
-*   The browser used to open gmail (to the one you like most, the default is firefox),
-*   The flags used to open the browser
+# Security
 
-    *   --ProfileManager (on firefox, it allows for picking a profile),
-    *   --new-tab (to avoid a new instance),
-    *   -P <profile-name> (choose an specific profile)
-    *   --safe-mode (to use firefox without extensions and make it lighter),
-    *   ...
+*   No shell is ever used: fetchmail, the browser and notifications get argument lists,
+    so config values or mail-server output cannot inject commands.
+*   Passwords live in the Secret Service keyring and are piped to fetchmail through stdin —
+    they never touch the disk. Optional file mode writes `~/.config/gmail-tray/fetchmailrc` with mode 0600.
+*   TLS is mandatory and certificates are verified (`ssl sslcertck`, or STARTTLS).
+*   Config is written atomically with mode 0600; old world-readable configs are tightened.
+*   Lock and pid files are in `$XDG_RUNTIME_DIR`, not the world-writable `/tmp`.
+*   All config values are validated (https-only URL, hostnames, ports, no control characters).
+*   Text shown in notifications is escaped (no markup injection from mailbox names).
+*   fetchmail runs with its own pid file, so it never clashes with a fetchmail daemon you run.
 
-*   The path to the gmail-tray icon (to another icon perhaps),
-*   The app's title,
-*   And even the link to open (if you want to open outlook for instance)
+# Command line
 
-## (SNI) Waybar support
+```
+gmail-tray               start the tray (if already running: open Gmail)
+gmail-tray --settings    open the settings window
+gmail-tray --check       check all accounts, print the result (exit 1 on errors)
+gmail-tray --once        print Waybar JSON and exit
+gmail-tray -v            debug logging
+```
 
-Waybar’s tray module (SNI/StatusNotifierItem) displays:
-- The icon
-- The name
-- NOT the dynamic label (the unread count this program use).
+# (SNI) Waybar support
 
-This is a known limitation of:
-- KDE/Qt SNI spec
-- waybar's implementation
-- many modern trays in Wayland
+Waybar's tray shows the icon but not the unread label, so use a custom module:
 
-Therefore, there is a hack to inclue a unread counter on waybar:
-
-*   Add this to `~/.config/waybar/config.jsonc`
 ```jsonc
 "custom/gmail": {
-    "exec": "gmail-tray --once | grep '{'",
-    "interval": 30,
+    "exec": "gmail-tray --once",
+    "interval": 60,
     "return-type": "json",
-    "format": " @ {} "
+    "format": " {} ",
+    "on-click": "gmail-tray"
 },
 ```
-*   Don't forget to enable the module (I recommend putting it right before the tray icons)
-```jsonc
-    "modules-right": [
-        "tray",
-        "custom/gmail",
-        ...
-    ],
-```
-* Then, customize the module as you want, adding to `~/.config/waybar/styles.css`:
+
+The module gets the CSS classes `unread`, `none` or `error`:
+
 ```css
-#custom-gmail {
-    padding: 0 10px;
-    color: #ffffff;
-}
+#custom-gmail.unread { color: #ea4335; }
+#custom-gmail.error  { color: #fbbc05; }
+```
+
+# Development
+
+```sh
+python3 bin/gmail-tray --settings   # runs straight from the checkout
+make test                           # unit tests + real fetchmail against a fake IMAP server
+makepkg --printsrcinfo > .SRCINFO
 ```

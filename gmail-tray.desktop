@@ -1,8 +1,0 @@
-[Desktop Entry]
-Comment=Lightweight Gmail tray notifier
-Exec=gmail-tray
-Hidden=false
-Icon=gmail-tray
-Name=Gmail Tray
-NoDisplay=false
-Type=Application

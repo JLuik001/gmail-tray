@@ -1,0 +1,14 @@
+{
+    "version": 2,
+    "url": "https://mail.google.com",
+    "icon": "gmail-tray",
+    "title": "Gmail-Tray",
+    "interval": 60,
+    "browser": "",
+    "flags": [],
+    "notifications": true,
+    "notification_timeout": 5,
+    "password_store": "keyring",
+    "fetchmailrc": "~/.fetchmailrc",
+    "accounts": []
+}

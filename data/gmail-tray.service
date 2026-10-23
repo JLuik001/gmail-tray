@@ -1,0 +1,16 @@
+[Unit]
+Description=Gmail Tray Notifier
+Documentation=https://github.com/JLuik001/gmail-tray
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/gmail-tray
+Restart=on-failure
+RestartSec=10
+# Files created by gmail-tray (config, generated fetchmail rc) are private.
+UMask=0077
+
+[Install]
+WantedBy=graphical-session.target
