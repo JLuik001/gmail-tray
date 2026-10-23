@@ -664,6 +664,7 @@ class SettingsWindow(Gtk.Window):
         self.e_icon.set_text(c.icon)
         self.sw_notify.set_active(c.notifications)
         self.e_timeout.set_value(c.notification_timeout)
+        self.sw_badge.set_active(c.badge)
         if c.password_store == "keyring" and self.keyring_ok:
             self.rb_keyring.set_active(True)
         else:
@@ -753,6 +754,9 @@ class SettingsWindow(Gtk.Window):
         self.sw_notify.connect("notify::active", lambda *_: self.e_timeout.set_sensitive(
             self.sw_notify.get_active()))
         self.e_timeout.set_sensitive(c.notifications)
+        self.sw_badge = add("Show unread count on the tray icon", Gtk.Switch(active=c.badge),
+                            "Red badge with the number of unread messages; amber “!” on errors.",
+                            expand=False)
         test = Gtk.Button(label="Send a test notification")
         test.connect("clicked", self.on_test_notification)
         add("", test, expand=False)
@@ -820,6 +824,7 @@ class SettingsWindow(Gtk.Window):
         cfg.icon = self.e_icon.get_text().strip()
         cfg.notifications = self.sw_notify.get_active()
         cfg.notification_timeout = int(self.e_timeout.get_value())
+        cfg.badge = self.sw_badge.get_active()
         cfg.password_store = "keyring" if self.rb_keyring.get_active() else "fetchmailrc"
         cfg.accounts = copy.deepcopy(self.accounts)
         return cfg.validate()

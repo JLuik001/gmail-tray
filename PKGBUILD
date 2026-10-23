@@ -1,7 +1,7 @@
 # Maintainer: Jyri Luik
 # Contributor: Maykon Marcos Junior <maykon.marcos.junior.dev@gmail.com>
 pkgname=gmail-tray-git
-pkgver=2.1.0.r0.g0000000
+pkgver=2.2.0.r0.g0000000
 pkgrel=1
 pkgdesc="Minimal Gmail tray notifier with unread counter, keyring support and a settings GUI"
 arch=('any')
@@ -14,6 +14,7 @@ depends=('fetchmail'
          'libnotify'
          'libsecret'
          'python'
+         'python-cairo'
          'python-gobject')
 optdepends=('org.freedesktop.secrets: keep passwords in the desktop keyring (gnome-keyring, kwallet, keepassxc)')
 makedepends=('git')

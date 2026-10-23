@@ -183,13 +183,14 @@ class Config:
     flags: list[str] = field(default_factory=list)
     notifications: bool = True
     notification_timeout: int = 5          # seconds, 0 = until dismissed
+    badge: bool = True                     # draw the unread count on the tray icon
     password_store: str = "keyring"
     fetchmailrc: str = "~/.fetchmailrc"   # hand-written rc used when no accounts are managed
     accounts: list[Account] = field(default_factory=list)
     extra: dict = field(default_factory=dict)  # unknown keys, preserved on save
 
     KNOWN = ("url", "icon", "title", "interval", "browser", "flags", "notifications",
-             "notification_timeout", "password_store", "fetchmailrc", "accounts", "version")
+             "notification_timeout", "badge", "password_store", "fetchmailrc", "accounts", "version")
 
     @property
     def fetchmailrc_path(self) -> Path:
@@ -215,6 +216,8 @@ class Config:
             _check_text("flag", flag, 1024)
         if not isinstance(self.notifications, bool):
             raise ConfigError("notifications must be true or false")
+        if not isinstance(self.badge, bool):
+            raise ConfigError("badge must be true or false")
         if (not isinstance(self.notification_timeout, int) or isinstance(self.notification_timeout, bool)
                 or not 0 <= self.notification_timeout <= 600):
             raise ConfigError("notification_timeout must be 0–600 seconds")
@@ -246,6 +249,7 @@ class Config:
             flags=list(flags) if isinstance(flags, list) else flags,
             notifications=d.get("notifications", base.notifications),
             notification_timeout=d.get("notification_timeout", base.notification_timeout),
+            badge=d.get("badge", base.badge),
             password_store=d.get("password_store", base.password_store),
             fetchmailrc=d.get("fetchmailrc", base.fetchmailrc),
             accounts=[Account.from_dict(a) for a in d.get("accounts", [])],
@@ -268,6 +272,7 @@ class Config:
             "flags": list(self.flags),
             "notifications": self.notifications,
             "notification_timeout": self.notification_timeout,
+            "badge": self.badge,
             "password_store": self.password_store,
             "fetchmailrc": self.fetchmailrc,
             "accounts": [a.to_dict() for a in self.accounts],

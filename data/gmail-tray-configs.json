@@ -8,6 +8,7 @@
     "flags": [],
     "notifications": true,
     "notification_timeout": 5,
+    "badge": true,
     "password_store": "keyring",
     "fetchmailrc": "~/.fetchmailrc",
     "accounts": []

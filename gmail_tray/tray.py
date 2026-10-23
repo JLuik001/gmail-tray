@@ -35,6 +35,13 @@ class TrayApp:
         self.indicator.set_title(self.cfg.title)
         self.indicator.set_attention_icon_full(self.cfg.icon, "Unread mail")
         self.indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
+        self.badges = None
+        try:
+            from .badge import BadgeIcons
+            self.badges = BadgeIcons(config.runtime_dir() / "icons")
+            self.indicator.set_icon_theme_path(str(self.badges.dir))
+        except Exception as e:  # noqa: BLE001  (pycairo missing etc.)
+            log.warning("Unread badge disabled: %s", e)
         self.notifier = desktop.Notifier(self.cfg.title)
         self._rebuild_menu()
 
@@ -74,9 +81,9 @@ class TrayApp:
             log.error("Not reloading, configuration invalid: %s", e)
             return False
         log.info("Configuration reloaded")
-        self.indicator.set_icon_full(self.cfg.icon, self.cfg.title)
-        self.indicator.set_attention_icon_full(self.cfg.icon, "Unread mail")
         self.indicator.set_title(self.cfg.title)
+        self._update_icon(sum(s.unread for s in self.statuses if s.ok),
+                          any(not s.ok for s in self.statuses))
         self.prev_unread = {}
         self._schedule()
         self.check_now()
@@ -110,10 +117,7 @@ class TrayApp:
         total = sum(s.unread for s in statuses if s.ok)
         errors = [s for s in statuses if not s.ok]
 
-        self.indicator.set_label(str(total) if total else ("!" if errors and not total else ""),
-                                 "999")
-        self.indicator.set_status(AppIndicator.IndicatorStatus.ATTENTION if total
-                                  else AppIndicator.IndicatorStatus.ACTIVE)
+        self._update_icon(total, bool(errors))
 
         newly = [s for s in statuses if s.ok and s.unread > self.prev_unread.get(s.key, 0)]
         if newly and self.cfg.notifications:
@@ -123,6 +127,25 @@ class TrayApp:
             log.warning("%s: %s", s.user, s.error)
         self._rebuild_menu()
         return False
+
+    def _update_icon(self, total: int, has_errors: bool) -> None:
+        """Red badge with the unread count, amber "!" on errors, plain icon otherwise."""
+        name = self.cfg.icon
+        if self.badges and self.cfg.badge and (total or has_errors):
+            from .badge import AMBER, RED
+            try:
+                name = (self.badges.name_for(self.cfg.icon, self.badges.label(total), RED) if total
+                        else self.badges.name_for(self.cfg.icon, "!", AMBER))
+            except Exception as e:  # noqa: BLE001
+                log.warning("Cannot draw badge: %s", e)
+                name = self.cfg.icon
+        desc = f"{total} unread" if total else self.cfg.title
+        self.indicator.set_icon_full(name, desc)
+        self.indicator.set_attention_icon_full(name, desc)
+        # Labels show where the tray supports them (GNOME); others rely on the badge.
+        self.indicator.set_label(str(total) if total else "", "999")
+        self.indicator.set_status(AppIndicator.IndicatorStatus.ATTENTION if total
+                                  else AppIndicator.IndicatorStatus.ACTIVE)
 
     def _account_for(self, status: AccountStatus):
         return next((a for a in self.cfg.accounts if a.key == status.key), None)

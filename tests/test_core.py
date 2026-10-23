@@ -314,6 +314,29 @@ class BackupTests(TempHome):
         self.assertEqual(account_store.read_managed_rc(), pw)
 
 
+class BadgeTests(TempHome):
+    def test_badge_icons(self):
+        try:
+            from gmail_tray.badge import AMBER, RED, BadgeIcons
+        except ImportError as e:
+            self.skipTest(f"cairo not available: {e}")
+        b = BadgeIcons(Path(self.tmp) / "icons")
+        self.assertEqual(b.label(5), "5")
+        self.assertEqual(b.label(150), "99+")
+        n1 = b.name_for("no-such-icon", "3", RED)
+        self.assertEqual(n1, b.name_for("no-such-icon", "3", RED))
+        n2 = b.name_for("no-such-icon", "!", AMBER)
+        self.assertNotEqual(n1, n2)
+        png = (b.dir / f"{n1}.png").read_bytes()
+        self.assertTrue(png.startswith(b"\x89PNG"))
+
+    def test_badge_option(self):
+        self.assertTrue(Config().badge)
+        self.assertFalse(Config.from_dict({"badge": False}).badge)
+        with self.assertRaises(ConfigError):
+            Config.from_dict({"badge": "yes"})
+
+
 class GtkVersionTests(unittest.TestCase):
     def test_gtk3_is_pinned_even_when_gtk4_exists(self):
         import subprocess
