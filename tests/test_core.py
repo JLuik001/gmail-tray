@@ -116,9 +116,27 @@ fetchmail: No mail for b@gmail.com at imap.gmail.com
 2 messages (2 seen) for d@x.ee at mail.x.ee.
 garbage line
 """
+        expected = [("a@gmail.com", "imap.gmail.com", 3, 5), ("b@gmail.com", "imap.gmail.com", 0, 0),
+                    ("c@x.ee", "mail.x.ee", 1, 1), ("d@x.ee", "mail.x.ee", 0, 2)]
+        got = [(s.user, s.server, s.unread, s.total) for s in fetchmail.parse_output(out)]
+        self.assertEqual(got, expected)
+
+    def test_parse_output_fetchmail_66(self):
+        # fetchmail >= 6.5 puts a timestamp and program name in front of every line
+        out = """Oct 23 09:35:37 fetchmail: 5 messages (2 seen) for a@gmail.com at imap.gmail.com (folder INBOX).
+Oct  3 09:35:37 fetchmail: No mail for b@gmail.com at imap.gmail.com (folder INBOX)
+Oct 23 09:35:38 fetchmail: 1 message for c@x.ee at mail.x.ee (1234 octets).
+"""
         got = [(s.user, s.server, s.unread, s.total) for s in fetchmail.parse_output(out)]
         self.assertEqual(got, [("a@gmail.com", "imap.gmail.com", 3, 5), ("b@gmail.com", "imap.gmail.com", 0, 0),
-                               ("c@x.ee", "mail.x.ee", 1, 1), ("d@x.ee", "mail.x.ee", 0, 2)])
+                               ("c@x.ee", "mail.x.ee", 1, 1)])
+
+    def test_error_text_strips_prefix(self):
+        import subprocess
+        proc = subprocess.CompletedProcess([], 3, "", "Oct 23 06:38:00 fetchmail: Authorization failure on "
+                                           "me@x.ee@host\nOct 23 06:38:00 fetchmail: For help, see the FAQ\n")
+        self.assertEqual(fetchmail._error_text(proc),
+                         "Authentication failed (for Gmail use an app password): Authorization failure on me@x.ee@host")
 
 
 class DictBackend:

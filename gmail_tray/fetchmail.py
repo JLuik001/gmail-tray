@@ -41,11 +41,15 @@ EXIT_MESSAGES = {
     23: "fetchmail internal error",
 }
 
+# fetchmail >= 6.5 prefixes every report line with "Mon DD HH:MM:SS fetchmail: ";
+# 6.4 only prefixes some lines with "fetchmail: ". Accept both.
+_PREFIX = r"(?:[A-Z][a-z]{2} +\d{1,2} \d{2}:\d{2}:\d{2} )?(?:\S*fetchmail: )?"
+_PREFIX_RE = re.compile("^" + _PREFIX)
 _MAIL_RE = re.compile(
-    r"^(?:fetchmail: )?(\d+) messages? (?:\((\d+) seen\) )?for (.+?) at (\S+?)"
+    "^" + _PREFIX + r"(\d+) messages? (?:\((\d+) seen\) )?for (.+?) at (\S+?)"
     r"(?: \(folder (.*?)\))?(?: \(\d+ octets\))?\.$"
 )
-_NOMAIL_RE = re.compile(r"^(?:fetchmail: )?No mail for (.+?) at (\S+?)(?: \(folder (.*?)\))?\.?$")
+_NOMAIL_RE = re.compile("^" + _PREFIX + r"No mail for (.+?) at (\S+?)(?: \(folder (.*?)\))?\.?$")
 
 
 class FetchmailError(RuntimeError):
@@ -285,9 +289,7 @@ def _error_text(proc: subprocess.CompletedProcess) -> str:
     base = EXIT_MESSAGES.get(proc.returncode, f"fetchmail exited with code {proc.returncode}")
     detail = ""
     for line in reversed(proc.stderr.strip().splitlines()):
-        line = line.strip()
-        if line.startswith("fetchmail: "):
-            line = line[len("fetchmail: "):]
+        line = _PREFIX_RE.sub("", line.strip())
         if line and "Running as root" not in line and not line.startswith("For help"):
             detail = line
             break
