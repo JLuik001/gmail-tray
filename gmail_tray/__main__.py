@@ -90,8 +90,8 @@ def main(argv=None) -> int:
                 return 1
             return 0
 
+        from .tray import TrayApp  # pins GTK 3 before Gtk is imported
         from gi.repository import Gtk
-        from .tray import TrayApp
         signal.signal(signal.SIGINT, signal.SIG_DFL)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
         app = TrayApp(cfg_path)

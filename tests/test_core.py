@@ -251,5 +251,16 @@ class FetchmailIntegration(TempHome):
         self.assertIn("chmod 600", res[0].error)
 
 
+class GtkVersionTests(unittest.TestCase):
+    def test_gtk3_is_pinned_even_when_gtk4_exists(self):
+        import subprocess
+        code = ("import warnings; warnings.simplefilter('error');"
+                "import gmail_tray; from gi.repository import Gtk;"
+                "assert Gtk.get_major_version() == 3, Gtk.get_major_version()")
+        root = str(Path(__file__).resolve().parent.parent)
+        proc = subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

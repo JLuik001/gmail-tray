@@ -1,7 +1,7 @@
 # Maintainer: Jyri Luik
 # Contributor: Maykon Marcos Junior <maykon.marcos.junior.dev@gmail.com>
 pkgname=gmail-tray-git
-pkgver=2.0.1.r0.g0000000
+pkgver=2.0.2.r0.g0000000
 pkgrel=1
 pkgdesc="Minimal Gmail tray notifier with unread counter, keyring support and a settings GUI"
 arch=('any')

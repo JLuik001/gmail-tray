@@ -1,6 +1,6 @@
 pkgbase = gmail-tray-git
 	pkgdesc = Minimal Gmail tray notifier with unread counter, keyring support and a settings GUI
-	pkgver = 2.0.1.r0.g0000000
+	pkgver = 2.0.2.r0.g0000000
 	pkgrel = 1
 	url = https://github.com/JLuik001/gmail-tray
 	arch = any
