@@ -1,6 +1,6 @@
 """Gmail Tray — minimal mail notifier built on fetchmail."""
 
-__version__ = "2.2.2"
+__version__ = "2.3.0"
 APP_ID = "gmail-tray"
 APP_NAME = "Gmail Tray"
 

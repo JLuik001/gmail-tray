@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
 import shlex
 import shutil
 import subprocess
@@ -657,8 +658,9 @@ class SettingsWindow(Gtk.Window):
     def _apply_general(self, c: Config):
         self.e_title.set_text(c.title)
         self.e_url.set_text(c.url)
-        browser_ok = not c.browser or shutil.which(c.browser)
-        self.e_browser.get_child().set_text(c.browser if browser_ok else SYSTEM_DEFAULT_LABEL)
+        browser_ok = (not c.browser or (desktop.browser_name(c.browser) if c.browser.endswith(".desktop")
+                                         else shutil.which(c.browser)))
+        self._set_browser_field(c.browser if browser_ok else "")
         self.e_flags.set_text(shlex.join(c.flags) if browser_ok else "")
         self.e_interval.set_value(c.interval)
         self.e_icon.set_text(c.icon)
@@ -697,10 +699,14 @@ class SettingsWindow(Gtk.Window):
 
         self.e_browser = Gtk.ComboBoxText.new_with_entry()
         self.e_browser.append_text(SYSTEM_DEFAULT_LABEL)
-        for b in desktop.installed_browsers():
-            self.e_browser.append_text(b)
-        self.e_browser.get_child().set_text(c.browser or SYSTEM_DEFAULT_LABEL)
-        add("Browser", self.e_browser, "Choose from the list or type a command name or path.")
+        self.browser_ids: dict[str, str] = {}      # shown name -> desktop-file id
+        for app_id, name in desktop.installed_browsers():
+            if name in self.browser_ids:            # two apps with the same name
+                name = f"{name} ({app_id.removesuffix('.desktop')})"
+            self.browser_ids[name] = app_id
+            self.e_browser.append_text(name)
+        self._set_browser_field(c.browser)
+        add("Browser", self.e_browser, "Choose an installed browser, or type a command name or path.")
 
         self.e_flags = add("Browser options", Gtk.Entry(text=shlex.join(c.flags)),
                            "Extra arguments, e.g. --new-tab or -P work (Firefox profile).")
@@ -721,6 +727,28 @@ class SettingsWindow(Gtk.Window):
         add("Tray icon", icon_box, "Icon theme name or path to an image file.")
         self._update_icon_preview()
         return grid
+
+    def _set_browser_field(self, browser: str):
+        text = SYSTEM_DEFAULT_LABEL
+        if browser.endswith(".desktop"):
+            text = next((n for n, i in self.browser_ids.items() if i == browser), browser)
+        elif browser:
+            text = browser
+        self.e_browser.get_child().set_text(text)
+
+    def _browser_value(self) -> str:
+        text = self.e_browser.get_child().get_text().strip()
+        if not text or text == SYSTEM_DEFAULT_LABEL:
+            return ""
+        if text in self.browser_ids:
+            return self.browser_ids[text]
+        if text.endswith(".desktop"):
+            if not desktop.browser_name(text):
+                raise ConfigError(f"Browser “{text}” is not installed")
+            return text
+        if not shutil.which(os.path.expanduser(text)):
+            raise ConfigError(f"Browser “{text}” was not found")
+        return text
 
     def _update_icon_preview(self):
         name = self.e_icon.get_text().strip()
@@ -806,15 +834,11 @@ class SettingsWindow(Gtk.Window):
     # ---------------------------------------------------------------- save
 
     def _collect(self) -> Config:
-        browser = self.e_browser.get_child().get_text().strip()
-        if browser == SYSTEM_DEFAULT_LABEL:
-            browser = ""
+        browser = self._browser_value()
         try:
             flags = shlex.split(self.e_flags.get_text())
         except ValueError as e:
             raise ConfigError(f"Browser options: {e}") from e
-        if browser and not shutil.which(browser):
-            raise ConfigError(f"Browser “{browser}” was not found")
         cfg = copy.deepcopy(self.orig)
         cfg.title = self.e_title.get_text().strip()
         cfg.url = self.e_url.get_text().strip()

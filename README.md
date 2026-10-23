@@ -91,7 +91,7 @@ is `~/.config/gmail-tray/gmail-tray-configs.json` and can still be edited by han
 | Key | Meaning |
 | --- | --- |
 | `url` | Page to open (https only). Gmail accounts open their own inbox. |
-| `browser` | Command name or path; empty = system default browser |
+| `browser` | Installed browser (desktop id such as `librewolf.desktop`, Flatpaks too), a command name or path; empty = system default |
 | `flags` | Extra browser arguments, e.g. `["--new-tab"]`, `["-P", "work"]` |
 | `interval` | Seconds between checks (30–86400) |
 | `icon` | Icon theme name or image path |

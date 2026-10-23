@@ -338,6 +338,41 @@ class BadgeTests(TempHome):
             Config.from_dict({"badge": "yes"})
 
 
+class BrowserTests(TempHome):
+    def test_launch_modes(self):
+        # Own process: GIO caches the list of installed apps per process.
+        import subprocess
+        log = Path(self.tmp) / "browser.log"
+        fake = Path(self.tmp) / "fakebrowser"
+        fake.write_text(f"#!/bin/sh\necho \"$@\" >> {log}\n")
+        fake.chmod(0o755)
+        apps = Path(self.tmp) / "data" / "applications"
+        apps.mkdir(parents=True)
+        (apps / "test-browser.desktop").write_text(
+            f"[Desktop Entry]\nType=Application\nName=Test Browser\nExec={fake} --via-desktop %u\n"
+            "MimeType=x-scheme-handler/https;\nCategories=Network;WebBrowser;\n")
+        code = f"""
+import time
+from gmail_tray import desktop
+from gmail_tray.config import Config
+assert ("test-browser.desktop", "Test Browser") in desktop.installed_browsers()
+assert desktop._open_with_browser(Config(browser={str(fake)!r}, flags=["--new-tab"]), "https://a")
+assert desktop._open_with_browser(Config(browser="test-browser.desktop"), "https://b")
+assert desktop._open_with_browser(Config(browser="test-browser.desktop", flags=["-P", "work"]), "https://c")
+assert not desktop._open_with_browser(Config(browser="missing.desktop"), "https://d")
+assert not desktop._open_with_browser(Config(browser="no-such-browser"), "https://e")
+time.sleep(1)
+"""
+        env = dict(os.environ, XDG_DATA_HOME=str(Path(self.tmp) / "data"),
+                   XDG_DATA_DIRS=str(Path(self.tmp) / "data"))
+        root = Path(__file__).resolve().parent.parent
+        r = subprocess.run([sys.executable, "-c", code], cwd=root, env=env,
+                           capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(sorted(log.read_text().splitlines()),
+                         ["--new-tab https://a", "--via-desktop https://b", "-P work https://c"])
+
+
 class GtkVersionTests(unittest.TestCase):
     def test_gtk3_is_pinned_even_when_gtk4_exists(self):
         import subprocess
